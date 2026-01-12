@@ -24,20 +24,14 @@ const dialogue = {
     ]
 };
 
-// 摇杆控制（动态跟随式）
+// 摇杆控制
 const joystick = {
     element: null,
     handle: null,
-    container: null,
     isActive: false,
     x: 0,
     y: 0,
-    centerX: 0, // 摇杆中心X坐标（屏幕坐标）
-    centerY: 0, // 摇杆中心Y坐标（屏幕坐标）
-    initialX: 0, // 初始触摸X坐标（用于计算方向）
-    initialY: 0, // 初始触摸Y坐标（用于计算方向）
-    maxDistance: 27, // 适配新的摇杆大小（100px摇杆，45px手柄，最大移动距离约27px）
-    touchId: null // 当前触摸ID
+    maxDistance: 27 // 适配新的摇杆大小（100px摇杆，45px手柄，最大移动距离约27px）
 };
 
 // 小蛋糕对象（添加平滑移动）
@@ -71,6 +65,12 @@ const keys = {
     ArrowRight: false
 };
 
+// 触控拖拽控制
+const touchControl = {
+    active: false,
+    x: 0,
+    y: 0
+};
 
 // 大小映射配置（蛋糕与水果统一使用）
 const sizeConfig = {
@@ -211,7 +211,11 @@ function init() {
     cake.y = config.height / 2;
     cake.size = sizeFromScore(config.score);
     
-    // 初始化控制（不再初始化固定摇杆）
+    // 初始化摇杆
+    joystick.element = document.getElementById('joystick');
+    joystick.handle = document.getElementById('joystickHandle');
+    
+    setupJoystick();
     setupKeyboardControls();
     setupTouchControls();
     setupEventListeners();
@@ -409,110 +413,94 @@ function updateCanvasSize() {
     config.canvas.height = config.height;
 }
 
-// 创建动态跟随式摇杆
-function createDynamicJoystick(centerX, centerY) {
-    // 如果摇杆已存在，先移除
-    if (joystick.container) {
-        removeDynamicJoystick();
-    }
+// 设置摇杆事件
+function setupJoystick() {
+    let touchId = null;
     
-    // 创建摇杆容器
-    const container = document.createElement('div');
-    container.className = 'joystick-container dynamic-joystick';
-    container.style.position = 'fixed';
-    container.style.left = `${centerX}px`;
-    container.style.top = `${centerY}px`;
-    container.style.transform = 'translate(-50%, -50%)';
-    container.style.pointerEvents = 'none'; // 不拦截触摸事件
+    // 鼠标事件
+    joystick.element.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        joystick.isActive = true;
+        updateJoystick(e.clientX, e.clientY);
+    });
     
-    // 创建摇杆背景
-    const joystickBg = document.createElement('div');
-    joystickBg.className = 'joystick';
+    document.addEventListener('mousemove', (e) => {
+        if (joystick.isActive) {
+            updateJoystick(e.clientX, e.clientY);
+        }
+    });
     
-    // 创建摇杆手柄
-    const handle = document.createElement('div');
-    handle.className = 'joystick-handle';
+    document.addEventListener('mouseup', () => {
+        joystick.isActive = false;
+        resetJoystick();
+    });
     
-    joystickBg.appendChild(handle);
-    container.appendChild(joystickBg);
-    document.body.appendChild(container);
+    // 触摸事件
+    joystick.element.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        touchId = e.touches[0].identifier;
+        joystick.isActive = true;
+        const touch = e.touches[0];
+        updateJoystick(touch.clientX, touch.clientY);
+    });
     
-    // 保存引用
-    joystick.container = container;
-    joystick.element = joystickBg;
-    joystick.handle = handle;
-    joystick.centerX = centerX;
-    joystick.centerY = centerY;
-    joystick.initialX = centerX; // 保存初始触摸位置
-    joystick.initialY = centerY;
-    joystick.isActive = true;
+    document.addEventListener('touchmove', (e) => {
+        if (joystick.isActive && touchId !== null) {
+            e.preventDefault();
+            const touch = Array.from(e.touches).find(t => t.identifier === touchId);
+            if (touch) {
+                updateJoystick(touch.clientX, touch.clientY);
+            }
+        }
+    });
+    
+    document.addEventListener('touchend', (e) => {
+        if (touchId !== null && !Array.from(e.touches).find(t => t.identifier === touchId)) {
+            joystick.isActive = false;
+            touchId = null;
+            resetJoystick();
+        }
+    });
 }
 
-// 移除动态摇杆
-function removeDynamicJoystick() {
-    if (joystick.container && joystick.container.parentNode) {
-        joystick.container.parentNode.removeChild(joystick.container);
-    }
-    joystick.container = null;
-    joystick.element = null;
-    joystick.handle = null;
-    joystick.isActive = false;
-    joystick.x = 0;
-    joystick.y = 0;
-    joystick.touchId = null;
-    joystick.initialX = 0;
-    joystick.initialY = 0;
-}
-
-// 更新摇杆位置（跟随触摸点）
+// 更新摇杆位置
 function updateJoystick(clientX, clientY) {
-    if (!joystick.element || !joystick.handle || !joystick.container) return;
+    const rect = joystick.element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
     
-    // 跟随式摇杆：摇杆中心跟随触摸点移动
-    joystick.centerX = clientX;
-    joystick.centerY = clientY;
+    // 动态计算最大移动距离（摇杆半径 - 手柄半径）
+    const joystickRadius = rect.width / 2;
+    const handleRadius = joystick.handle.offsetWidth / 2;
+    const maxDistance = joystickRadius - handleRadius - 2; // 留2px边距
     
-    // 更新摇杆容器位置（跟随触摸点）
-    joystick.container.style.left = `${clientX}px`;
-    joystick.container.style.top = `${clientY}px`;
-    
-    // 手柄保持在摇杆中心（跟随式摇杆，手柄始终在中心）
-    joystick.x = 0;
-    joystick.y = 0;
-    joystick.handle.style.transform = 'translate(-50%, -50%)';
-    
-    // 计算相对于初始触摸点的方向向量（用于控制移动方向）
-    // 这里我们需要保存初始触摸位置来计算方向
-    if (!joystick.initialX) {
-        joystick.initialX = clientX;
-        joystick.initialY = clientY;
-    }
-    
-    const dx = clientX - joystick.initialX;
-    const dy = clientY - joystick.initialY;
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // 设置一个最小移动距离阈值，超过后才开始移动
-    const minDistance = 10; // 10px
-    if (distance > minDistance) {
-        const normalizedX = dx / distance;
-        const normalizedY = dy / distance;
-        cake.targetVx = normalizedX * cake.maxSpeed;
-        cake.targetVy = normalizedY * cake.maxSpeed;
+    if (distance > maxDistance) {
+        joystick.x = (dx / distance) * maxDistance;
+        joystick.y = (dy / distance) * maxDistance;
     } else {
-        // 距离太近，不移动
-        cake.targetVx = 0;
-        cake.targetVy = 0;
+        joystick.x = dx;
+        joystick.y = dy;
     }
+    
+    // 更新摇杆手柄位置
+    joystick.handle.style.transform = `translate(calc(-50% + ${joystick.x}px), calc(-50% + ${joystick.y}px))`;
+    
+    // 更新小蛋糕目标速度（使用平滑移动）
+    const normalizedX = joystick.x / maxDistance;
+    const normalizedY = joystick.y / maxDistance;
+    cake.targetVx = normalizedX * cake.maxSpeed;
+    cake.targetVy = normalizedY * cake.maxSpeed;
 }
 
 // 重置摇杆
 function resetJoystick() {
     joystick.x = 0;
     joystick.y = 0;
-    if (joystick.handle) {
-        joystick.handle.style.transform = 'translate(-50%, -50%)';
-    }
+    joystick.handle.style.transform = 'translate(-50%, -50%)';
     cake.targetVx = 0;
     cake.targetVy = 0;
 }
@@ -561,11 +549,13 @@ function updateKeyboardMovement() {
         targetVy /= length;
     }
     
-    // 电脑端：如果摇杆未激活，使用键盘输入
-    // 手机端：摇杆优先，键盘输入被忽略
+    // 如果摇杆未激活，使用键盘输入
     if (!joystick.isActive) {
         cake.targetVx = targetVx * cake.maxSpeed;
         cake.targetVy = targetVy * cake.maxSpeed;
+    } else {
+        // 如果摇杆激活，键盘输入会被忽略（摇杆优先）
+        // 但我们可以让它们同时工作，这里选择摇杆优先
     }
 }
 
@@ -579,60 +569,48 @@ function updateKeyboardMovementInLoop() {
 // 触屏拖拽控制（直接拖动方向）
 function setupTouchControls() {
     const canvas = config.canvas;
-    
-    // 检测是否为移动设备
-    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
-    
-    if (!isMobile) {
-        // 非移动设备不使用触摸控制
-        return;
-    }
+    const handleTouch = (clientX, clientY) => {
+        touchControl.active = true;
+        touchControl.x = clientX;
+        touchControl.y = clientY;
+        applyTouchVector(clientX, clientY);
+    };
     
     canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
+        if (e.target.closest('.joystick')) return; // 避免与摇杆冲突
         const touch = e.touches[0];
-        const touchId = touch.identifier;
-        
-        // 在触摸位置创建跟随式摇杆
-        createDynamicJoystick(touch.clientX, touch.clientY);
-        joystick.touchId = touchId;
-        
-        // 初始化摇杆位置
-        updateJoystick(touch.clientX, touch.clientY);
+        handleTouch(touch.clientX, touch.clientY);
     }, { passive: false });
     
     canvas.addEventListener('touchmove', (e) => {
-        if (!joystick.isActive || joystick.touchId === null) return;
-        
+        if (e.target.closest('.joystick')) return;
         e.preventDefault();
-        const touch = Array.from(e.touches).find(t => t.identifier === joystick.touchId);
-        if (touch) {
-            // 更新摇杆位置（跟随触摸点）
-            updateJoystick(touch.clientX, touch.clientY);
-        }
+        const touch = e.touches[0];
+        handleTouch(touch.clientX, touch.clientY);
     }, { passive: false });
     
-    canvas.addEventListener('touchend', (e) => {
-        if (joystick.touchId === null) return;
-        
-        // 检查是否还有对应的触摸点
-        const touch = Array.from(e.changedTouches || []).find(t => t.identifier === joystick.touchId);
-        if (touch || e.touches.length === 0) {
-            // 移除摇杆
-            removeDynamicJoystick();
-            resetJoystick();
-    // 移除动态摇杆（如果存在）
-    removeDynamicJoystick();
+    canvas.addEventListener('touchend', () => {
+        touchControl.active = false;
+        if (!joystick.isActive) {
+            cake.targetVx = 0;
+            cake.targetVy = 0;
         }
-    }, { passive: false });
-    
-    canvas.addEventListener('touchcancel', () => {
-        // 触摸被取消，移除摇杆
-        removeDynamicJoystick();
-        resetJoystick();
-    // 移除动态摇杆（如果存在）
-    removeDynamicJoystick();
-    }, { passive: false });
+    });
+}
+
+function applyTouchVector(clientX, clientY) {
+    const rect = config.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const dx = x - cake.x;
+    const dy = y - cake.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    if (!joystick.isActive) {
+        cake.targetVx = nx * cake.maxSpeed;
+        cake.targetVy = ny * cake.maxSpeed;
+    }
 }
 
 // 设置事件监听器
@@ -1205,8 +1183,6 @@ function restartGame() {
     document.getElementById('gameOverlay').classList.remove('show');
     
     resetJoystick();
-    // 移除动态摇杆（如果存在）
-    removeDynamicJoystick();
     
     // 重新开始生成水果
     setTimeout(() => spawnFruit(), 500);
