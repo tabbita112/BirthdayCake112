@@ -15,7 +15,7 @@
 
 ### 在线游玩
 
-访问 [GitHub Pages](https://你的用户名.github.io/仓库名/) 即可开始游戏！
+访问 [GitHub Pages](https://tabbitha112.github.io/BirthdayCake112/) 即可开始游戏！
 
 ### 本地运行
 
