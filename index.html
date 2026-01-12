@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#764ba2">
+    <meta name="description" content="一个有趣的大鱼吃小鱼类型游戏，帮助小蛋糕收集水果内馅！">
+    <title>小蛋糕大冒险</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json" id="manifest-link">
+    <link rel="icon" type="image/png" href="./Assets/icon-192.png">
+    <link rel="apple-touch-icon" href="./Assets/icon-192.png">
+    <script src="config.js"></script>
+</head>
+<body>
+    <!-- 开始界面 -->
+    <div class="start-screen" id="startScreen">
+        <div class="start-content">
+            <div class="cake-icon" id="cakeIcon">
+                <img src="./Assets/cake.png" alt="小蛋糕" style="width: 120px; height: auto;" id="cakeIconImg">
+            </div>
+            <div class="dialog-box">
+                <div class="dialog-text" id="dialogText">天哪！<input type="text" id="playerNameInput" placeholder="输入你的名字" maxlength="10">，今天是你的生日！</div>
+                <span class="dialog-arrow" id="dialogArrow">▶</span>
+            </div>
+            <div class="dialog-hint-container">
+                <div class="dialog-hint" id="dialogHint">按回车键确认</div>
+                <button class="enter-key-btn" id="enterKeyBtn" title="确认">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+            <button class="start-game-btn" id="startGameBtn" style="display: none;">开始游戏</button>
+        </div>
+    </div>
+    
+    <div class="game-container" id="gameContainer" style="display: none;">
+        <div class="game-header">
+            <div class="score-display">分数: <span id="score">1</span></div>
+            <div class="health-display">
+                <span class="heart">❤️</span>
+                <span id="health">3</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="joystick-container">
+            <div class="joystick" id="joystick">
+                <div class="joystick-handle" id="joystickHandle"></div>
+            </div>
+        </div>
+        
+        <div class="game-overlay" id="gameOverlay">
+            <div class="overlay-content">
+                <div id="overlayTitle"></div>
+                <div id="overlayMessage"></div>
+                <button id="restartBtn" class="restart-btn">重新开始</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>

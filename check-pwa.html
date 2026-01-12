@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA安装检查工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .check-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { color: #2ecc71; }
+        .error { color: #e74c3c; }
+        .warning { color: #f39c12; }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #764ba2; }
+        pre {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 PWA安装检查工具</h1>
+    
+    <div class="check-item">
+        <h3>1. HTTPS检查</h3>
+        <p id="https-check"></p>
+    </div>
+    
+    <div class="check-item">
+        <h3>2. Manifest.json检查</h3>
+        <p id="manifest-check"></p>
+        <pre id="manifest-content"></pre>
+    </div>
+    
+    <div class="check-item">
+        <h3>3. Service Worker检查</h3>
+        <p id="sw-check"></p>
+        <button onclick="unregisterSW()">注销Service Worker</button>
+        <button onclick="registerSW()">重新注册Service Worker</button>
+    </div>
+    
+    <div class="check-item">
+        <h3>4. 图标文件检查</h3>
+        <p id="icon-check"></p>
+    </div>
+    
+    <div class="check-item">
+        <h3>5. 安装提示</h3>
+        <p id="install-prompt"></p>
+        <button id="install-btn" onclick="installPWA()" style="display:none;">安装应用</button>
+    </div>
+    
+    <div class="check-item">
+        <h3>📋 修复建议</h3>
+        <div id="suggestions"></div>
+    </div>
+
+    <script>
+        let deferredPrompt;
+        
+        // 检查HTTPS
+        function checkHTTPS() {
+            const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            const el = document.getElementById('https-check');
+            if (isSecure) {
+                el.innerHTML = '<span class="success">✓ 通过</span> - 当前使用安全连接';
+            } else {
+                el.innerHTML = '<span class="error">✗ 失败</span> - 需要使用HTTPS或localhost';
+            }
+            return isSecure;
+        }
+        
+        // 检查Manifest
+        async function checkManifest() {
+            try {
+                const response = await fetch('/manifest.json');
+                if (!response.ok) throw new Error('无法加载manifest.json');
+                const manifest = await response.json();
+                document.getElementById('manifest-content').textContent = JSON.stringify(manifest, null, 2);
+                
+                const checks = [];
+                if (!manifest.name) checks.push('缺少name');
+                if (!manifest.short_name) checks.push('缺少short_name');
+                if (!manifest.icons || manifest.icons.length === 0) checks.push('缺少icons');
+                if (!manifest.start_url) checks.push('缺少start_url');
+                
+                const el = document.getElementById('manifest-check');
+                if (checks.length === 0) {
+                    el.innerHTML = '<span class="success">✓ 通过</span> - Manifest配置正确';
+                } else {
+                    el.innerHTML = `<span class="error">✗ 失败</span> - ${checks.join(', ')}`;
+                }
+                return checks.length === 0;
+            } catch (error) {
+                document.getElementById('manifest-check').innerHTML = `<span class="error">✗ 失败</span> - ${error.message}`;
+                return false;
+            }
+        }
+        
+        // 检查Service Worker
+        async function checkServiceWorker() {
+            const el = document.getElementById('sw-check');
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    if (registration) {
+                        el.innerHTML = `<span class="success">✓ 已注册</span> - Scope: ${registration.scope}`;
+                    } else {
+                        el.innerHTML = '<span class="warning">⚠ 未注册</span> - 点击按钮注册';
+                    }
+                } catch (error) {
+                    el.innerHTML = `<span class="error">✗ 错误</span> - ${error.message}`;
+                }
+            } else {
+                el.innerHTML = '<span class="error">✗ 不支持</span> - 浏览器不支持Service Worker';
+            }
+        }
+        
+        // 检查图标
+        async function checkIcons() {
+            const icons = ['/Assets/icon-192.png', '/Assets/icon-512.png'];
+            const results = [];
+            
+            for (const icon of icons) {
+                try {
+                    const response = await fetch(icon, { method: 'HEAD' });
+                    results.push({
+                        path: icon,
+                        exists: response.ok
+                    });
+                } catch {
+                    results.push({
+                        path: icon,
+                        exists: false
+                    });
+                }
+            }
+            
+            const el = document.getElementById('icon-check');
+            const allExist = results.every(r => r.exists);
+            if (allExist) {
+                el.innerHTML = '<span class="success">✓ 通过</span> - 所有图标文件存在';
+            } else {
+                const missing = results.filter(r => !r.exists).map(r => r.path).join(', ');
+                el.innerHTML = `<span class="error">✗ 失败</span> - 缺少图标: ${missing}`;
+            }
+            return allExist;
+        }
+        
+        // 注册Service Worker
+        async function registerSW() {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                console.log('Service Worker注册成功:', registration);
+                alert('Service Worker注册成功！请刷新页面。');
+                checkServiceWorker();
+            } catch (error) {
+                alert('Service Worker注册失败: ' + error.message);
+                console.error('注册失败:', error);
+            }
+        }
+        
+        // 注销Service Worker
+        async function unregisterSW() {
+            try {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration) {
+                    await registration.unregister();
+                    alert('Service Worker已注销！请刷新页面。');
+                    checkServiceWorker();
+                } else {
+                    alert('没有找到已注册的Service Worker');
+                }
+            } catch (error) {
+                alert('注销失败: ' + error.message);
+            }
+        }
+        
+        // 安装PWA
+        async function installPWA() {
+            if (!deferredPrompt) {
+                alert('安装提示不可用');
+                return;
+            }
+            
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log('用户选择:', outcome);
+            deferredPrompt = null;
+            document.getElementById('install-btn').style.display = 'none';
+        }
+        
+        // 监听安装提示
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('install-prompt').innerHTML = '<span class="success">✓ 可以安装</span>';
+            document.getElementById('install-btn').style.display = 'inline-block';
+        });
+        
+        // 生成修复建议
+        function generateSuggestions() {
+            const suggestions = [];
+            
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                suggestions.push('使用HTTPS或localhost访问（Service Worker需要安全连接）');
+            }
+            
+            if (!navigator.serviceWorker) {
+                suggestions.push('浏览器不支持Service Worker，请使用Chrome、Edge或Firefox');
+            }
+            
+            suggestions.push('确保所有文件都在服务器根目录下');
+            suggestions.push('清除浏览器缓存后重试');
+            suggestions.push('在Chrome中：设置 > 隐私设置和安全性 > 网站设置 > Service Worker，确保已启用');
+            
+            const el = document.getElementById('suggestions');
+            el.innerHTML = '<ul>' + suggestions.map(s => `<li>${s}</li>`).join('') + '</ul>';
+        }
+        
+        // 初始化检查
+        window.addEventListener('load', async () => {
+            checkHTTPS();
+            await checkManifest();
+            await checkServiceWorker();
+            await checkIcons();
+            generateSuggestions();
+            
+            // 定期更新Service Worker状态
+            setInterval(checkServiceWorker, 2000);
+        });
+    </script>
+</body>
+</html>
