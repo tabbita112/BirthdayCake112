@@ -16,7 +16,8 @@ const config = {
 const dialogue = {
     currentIndex: 0,
     dialogues: [
-        { text: '名字：{cakeName}', needsInput: true, inputType: 'cakeName', placeholder: '为它取名吧' },
+        { text: '哇，这是！！', needsInput: false},
+        { text: '{cakeName}', needsInput: true, inputType: 'cakeName', placeholder: '为它取名吧' },
         { text: '天哪！{name}，今天是你的生日！', needsInput: true, inputType: 'playerName', placeholder: '输入你的名字' },
         { text: '难怪你烤出了我，一个很美味小蛋糕！', needsInput: false },
         { text: '为了成为超美味小蛋糕，{name}大人，我需要你的帮助，收集水果内馅！', needsInput: false }
